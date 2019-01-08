@@ -3,34 +3,22 @@
 
     <!-- 查询和其他操作 -->
     <div class="filter-container">
-      <el-input v-model="listQuery.id" clearable class="filter-item" style="width: 200px;" placeholder="请输入品牌商ID"/>
-      <el-input v-model="listQuery.name" clearable class="filter-item" style="width: 200px;" placeholder="请输入品牌商名称"/>
+      <el-input v-model="listQuery.rolename" clearable class="filter-item" style="width: 200px;" placeholder="请输入角色名称"/>
       <el-button class="filter-item" type="primary" icon="el-icon-search" @click="handleFilter">查找</el-button>
       <el-button class="filter-item" type="primary" icon="el-icon-edit" @click="handleCreate">添加</el-button>
-      <el-button :loading="downloadLoading" class="filter-item" type="primary" icon="el-icon-download" @click="handleDownload">导出</el-button>
     </div>
 
     <!-- 查询结果 -->
     <el-table v-loading="listLoading" :data="list" size="small" element-loading-text="正在查询中。。。" border fit highlight-current-row>
+      <el-table-column align="center" label="角色名称" prop="name" sortable/>
 
-      <el-table-column align="center" label="品牌商ID" prop="id"/>
+      <el-table-column align="center" label="说明" prop="desc"/>
 
-      <el-table-column align="center" label="品牌商名称" prop="name"/>
-
-      <el-table-column align="center" property="picUrl" label="品牌商图片">
-        <template slot-scope="scope">
-          <img v-if="scope.row.picUrl" :src="scope.row.picUrl" width="80">
-        </template>
-      </el-table-column>
-
-      <el-table-column align="center" min-width="400px" label="介绍" prop="desc"/>
-
-      <el-table-column align="center" label="底价" prop="floorPrice"/>
-
-      <el-table-column align="center" label="操作" width="200" class-name="small-padding fixed-width">
+      <el-table-column align="center" label="操作" class-name="small-padding fixed-width">
         <template slot-scope="scope">
           <el-button type="primary" size="mini" @click="handleUpdate(scope.row)">编辑</el-button>
           <el-button type="danger" size="mini" @click="handleDelete(scope.row)">删除</el-button>
+          <el-button type="primary" size="mini" @click="handlePermission(scope.row)">授权</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -40,26 +28,11 @@
     <!-- 添加或修改对话框 -->
     <el-dialog :title="textMap[dialogStatus]" :visible.sync="dialogFormVisible">
       <el-form ref="dataForm" :rules="rules" :model="dataForm" status-icon label-position="left" label-width="100px" style="width: 400px; margin-left:50px;">
-        <el-form-item label="品牌商名称" prop="name">
+        <el-form-item label="角色名称" prop="name">
           <el-input v-model="dataForm.name"/>
         </el-form-item>
-        <el-form-item label="介绍" prop="simpleDesc">
+        <el-form-item label="说明" prop="desc">
           <el-input v-model="dataForm.desc"/>
-        </el-form-item>
-        <el-form-item label="品牌商图片" prop="picUrl">
-          <el-upload
-            :headers="headers"
-            :action="uploadPath"
-            :show-file-list="false"
-            :on-success="uploadPicUrl"
-            class="avatar-uploader"
-            accept=".jpg,.jpeg,.png,.gif">
-            <img v-if="dataForm.picUrl" :src="dataForm.picUrl" class="avatar">
-            <i v-else class="el-icon-plus avatar-uploader-icon"/>
-          </el-upload>
-        </el-form-item>
-        <el-form-item label="底价" prop="floorPrice">
-          <el-input v-model="dataForm.floorPrice"/>
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -69,64 +42,46 @@
       </div>
     </el-dialog>
 
+    <!-- 权限配置对话框 -->
+    <el-dialog :visible.sync="permissionDialogFormVisible" title="权限配置">
+      <el-tree
+        ref="tree"
+        :data="systemPermissions"
+        :default-checked-keys="assignedPermissions"
+        show-checkbox
+        node-key="id"
+        highlight-current/>
+      <div slot="footer" class="dialog-footer">
+        <el-button @click="permissionDialogFormVisible = false">取消</el-button>
+        <el-button type="primary" @click="updatePermission">确定</el-button>
+      </div>
+    </el-dialog>
+
   </div>
 </template>
 
-<style>
-.avatar-uploader .el-upload {
-  border: 1px dashed #d9d9d9;
-  border-radius: 6px;
-  cursor: pointer;
-  position: relative;
-  overflow: hidden;
-}
-.avatar-uploader .el-upload:hover {
-  border-color: #20a0ff;
-}
-.avatar-uploader-icon {
-  font-size: 28px;
-  color: #8c939d;
-  width: 120px;
-  height: 120px;
-  line-height: 120px;
-  text-align: center;
-}
-.avatar {
-  width: 145px;
-  height: 145px;
-  display: block;
-}
-</style>
-
 <script>
-import { listBrand, createBrand, updateBrand, deleteBrand } from '@/api/brand'
-import { uploadPath } from '@/api/storage'
-import { getToken } from '@/utils/auth'
-import Pagination from '@/components/Pagination' // Secondary package based on el-pagination
-
+import { listRole, createRole, updateRole, deleteRole, getPermission, updatePermission } from '@/api/role'
+import Pagination from '@/components/Pagination'
 export default {
-  name: 'Brand',
+  name: 'Role',
   components: { Pagination },
   data() {
     return {
-      uploadPath,
-      list: undefined,
+      list: null,
       total: 0,
       listLoading: true,
       listQuery: {
         page: 1,
         limit: 20,
-        id: undefined,
         name: undefined,
         sort: 'add_time',
         order: 'desc'
       },
       dataForm: {
         id: undefined,
-        name: '',
-        desc: '',
-        floorPrice: undefined,
-        picUrl: undefined
+        name: undefined,
+        desc: undefined
       },
       dialogFormVisible: false,
       dialogStatus: '',
@@ -136,16 +91,15 @@ export default {
       },
       rules: {
         name: [
-          { required: true, message: '品牌商名称不能为空', trigger: 'blur' }
+          { required: true, message: '角色名称不能为空', trigger: 'blur' }
         ]
       },
-      downloadLoading: false
-    }
-  },
-  computed: {
-    headers() {
-      return {
-        'X-Litemall-Admin-Token': getToken()
+      permissionDialogFormVisible: false,
+      systemPermissions: null,
+      assignedPermissions: null,
+      permissionForm: {
+        roleId: undefined,
+        permissions: []
       }
     }
   },
@@ -155,7 +109,7 @@ export default {
   methods: {
     getList() {
       this.listLoading = true
-      listBrand(this.listQuery)
+      listRole(this.listQuery)
         .then(response => {
           this.list = response.data.data.items
           this.total = response.data.data.total
@@ -174,10 +128,8 @@ export default {
     resetForm() {
       this.dataForm = {
         id: undefined,
-        name: '',
-        desc: '',
-        floorPrice: undefined,
-        picUrl: undefined
+        name: undefined,
+        desc: undefined
       }
     },
     handleCreate() {
@@ -188,19 +140,16 @@ export default {
         this.$refs['dataForm'].clearValidate()
       })
     },
-    uploadPicUrl: function(response) {
-      this.dataForm.picUrl = response.data.url
-    },
     createData() {
       this.$refs['dataForm'].validate(valid => {
         if (valid) {
-          createBrand(this.dataForm)
+          createRole(this.dataForm)
             .then(response => {
               this.list.unshift(response.data.data)
               this.dialogFormVisible = false
               this.$notify.success({
                 title: '成功',
-                message: '创建成功'
+                message: '添加角色成功'
               })
             })
             .catch(response => {
@@ -223,7 +172,7 @@ export default {
     updateData() {
       this.$refs['dataForm'].validate(valid => {
         if (valid) {
-          updateBrand(this.dataForm)
+          updateRole(this.dataForm)
             .then(() => {
               for (const v of this.list) {
                 if (v.id === this.dataForm.id) {
@@ -235,7 +184,7 @@ export default {
               this.dialogFormVisible = false
               this.$notify.success({
                 title: '成功',
-                message: '更新成功'
+                message: '更新管理员成功'
               })
             })
             .catch(response => {
@@ -248,11 +197,11 @@ export default {
       })
     },
     handleDelete(row) {
-      deleteBrand(row)
+      deleteRole(row)
         .then(response => {
           this.$notify.success({
             title: '成功',
-            message: '删除成功'
+            message: '删除管理员成功'
           })
           const index = this.list.indexOf(row)
           this.list.splice(index, 1)
@@ -264,25 +213,31 @@ export default {
           })
         })
     },
-    handleDownload() {
-      this.downloadLoading = true
-      import('@/vendor/Export2Excel').then(excel => {
-        const tHeader = [
-          '品牌商ID',
-          '品牌商名称',
-          '介绍',
-          '低价',
-          '品牌商图片'
-        ]
-        const filterVal = ['id', 'name', 'desc', 'floorPrice', 'picUrl']
-        excel.export_json_to_excel2(
-          tHeader,
-          this.list,
-          filterVal,
-          '品牌商信息'
-        )
-        this.downloadLoading = false
-      })
+    handlePermission(row) {
+      this.permissionDialogFormVisible = true
+      this.permissionForm.roleId = row.id
+      getPermission({ roleId: row.id })
+        .then(response => {
+          this.systemPermissions = response.data.data.systemPermissions
+          this.assignedPermissions = response.data.data.assignedPermissions
+        })
+    },
+    updatePermission() {
+      this.permissionForm.permissions = this.$refs.tree.getCheckedKeys(true)
+      updatePermission(this.permissionForm)
+        .then(response => {
+          this.permissionDialogFormVisible = false
+          this.$notify.success({
+            title: '成功',
+            message: '授权成功'
+          })
+        })
+        .catch(response => {
+          this.$notify.error({
+            title: '失败',
+            message: response.data.errmsg
+          })
+        })
     }
   }
 }
